@@ -1,56 +1,98 @@
 package model
 
 import (
-    "crypto/sha1"
-    "encoding/hex"
+    "net/url"
+    "sort"
     "sync"
 )
 
+const (
+    alphabet = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
+    base     = int64(len(alphabet))
+)
+
 type URLStore struct {
-    store map[string]string
-    lock  sync.RWMutex
+    sync.RWMutex
+    urls    map[string]string
+    counter int64
 }
 
 func NewURLStore() *URLStore {
-    return &URLStore{store: make(map[string]string)}
+    return &URLStore{
+        urls:    make(map[string]string),
+        counter: 1,
+    }
 }
 
-func (s *URLStore) Save(url string) string {
-    s.lock.Lock()
-    defer s.lock.Unlock()
-    hash := sha1.New()
-    hash.Write([]byte(url))
-    shortURL := hex.EncodeToString(hash.Sum(nil))[:8]
-    s.store[shortURL] = url
+func (s *URLStore) Save(originalURL string) string {
+    s.Lock()
+    defer s.Unlock()
+
+    // Increment counter and encode it
+    shortURL := encode(s.counter)
+    s.counter++
+    s.urls[shortURL] = originalURL
     return shortURL
 }
 
 func (s *URLStore) Get(shortURL string) (string, bool) {
-    s.lock.RLock()
-    defer s.lock.RUnlock()
-    url, found := s.store[shortURL]
-    return url, found
+    s.RLock()
+    defer s.RUnlock()
+    originalURL, found := s.urls[shortURL]
+    return originalURL, found
 }
 
 func (s *URLStore) GetTopDomains(limit int) map[string]int {
-    domainCount := make(map[string]int)
-    for _, url := range s.store {
-        domain := extractDomain(url)
-        domainCount[domain]++
-    }
+    s.RLock()
+    defer s.RUnlock()
 
-    topDomains := make(map[string]int)
-    // Extract top N domains based on count
-    for domain, count := range domainCount {
-        topDomains[domain] = count
-        if len(topDomains) == limit {
-            break
+    domainCount := make(map[string]int)
+
+    for _, originalURL := range s.urls {
+        parsedURL, err := url.Parse(originalURL)
+        if err == nil {
+            domain := parsedURL.Host
+            domainCount[domain]++
         }
     }
+
+    // Create a slice of domain names and sort by frequency
+    type kv struct {
+        Key   string
+        Value int
+    }
+
+    var sortedDomains []kv
+    for k, v := range domainCount {
+        sortedDomains = append(sortedDomains, kv{k, v})
+    }
+
+    sort.Slice(sortedDomains, func(i, j int) bool {
+        return sortedDomains[i].Value > sortedDomains[j].Value
+    })
+
+    // Prepare the final result with a limit
+    topDomains := make(map[string]int)
+    for i, domain := range sortedDomains {
+        if i >= limit {
+            break
+        }
+        topDomains[domain.Key] = domain.Value
+    }
+
     return topDomains
 }
 
-func extractDomain(url string) string {
-    // Logic to extract domain from the URL
-    return url // Placeholder
+func encode(num int64) string {
+    if num == 0 {
+        return string(alphabet[0])
+    }
+
+    encoded := ""
+    for num > 0 {
+        remainder := num % base
+        encoded = string(alphabet[remainder]) + encoded
+        num = num / base
+    }
+    return encoded
 }
