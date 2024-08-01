@@ -1,8 +1,11 @@
 package model
 
 import (
+    "context"
+    "github.com/go-redis/redis/v8"
     "net/url"
     "sort"
+    "strconv"
     "sync"
 )
 
@@ -13,58 +16,89 @@ const (
 
 type URLStore struct {
     sync.RWMutex
-    urls     map[string]string
-    reverse  map[string]string // for reverse lookup
-    counter  int64
+    client  *redis.Client
+    counter int64
 }
 
-func NewURLStore() *URLStore {
+func NewURLStore(redisAddr string) *URLStore {
+    client := redis.NewClient(&redis.Options{
+        Addr:     redisAddr,
+        Password: "", // no password set
+        DB:       0,  // use default DB
+    })
     return &URLStore{
-        urls:    make(map[string]string),
-        reverse: make(map[string]string),
+        client:  client,
         counter: 1,
     }
 }
 
-func (s *URLStore) Save(originalURL string) string {
+func (s *URLStore) Save(originalURL string) (string, error) {
     s.Lock()
     defer s.Unlock()
+    ctx := context.Background()
 
     // Check if the URL already exists
-    if shortURL, exists := s.reverse[originalURL]; exists {
-        return shortURL
+    shortURL, err := s.client.Get(ctx, originalURL).Result()
+    if err == nil {
+        return shortURL, nil
     }
 
     // Increment counter and encode it
-    shortURL := encode(s.counter)
+    shortURL = encode(s.counter)
     s.counter++
-    s.urls[shortURL] = originalURL
-    s.reverse[originalURL] = shortURL
-    return shortURL
+
+    // Store short URL and original URL
+    err = s.client.Set(ctx, shortURL, originalURL, 0).Err()
+    if err != nil {
+        return "", err
+    }
+    err = s.client.Set(ctx, originalURL, shortURL, 0).Err()
+    if err != nil {
+        return "", err
+    }
+
+    // Update counter in Redis
+    err = s.client.Set(ctx, "url-counter", strconv.FormatInt(s.counter, 10), 0).Err()
+    if err != nil {
+        return "", err
+    }
+
+    return shortURL, nil
 }
 
 func (s *URLStore) Get(shortURL string) (string, bool) {
     s.RLock()
     defer s.RUnlock()
-    originalURL, found := s.urls[shortURL]
-    return originalURL, found
+    ctx := context.Background()
+    originalURL, err := s.client.Get(ctx, shortURL).Result()
+    if err != nil {
+        return "", false
+    }
+    return originalURL, true
 }
 
 func (s *URLStore) GetTopDomains(limit int) map[string]int {
     s.RLock()
     defer s.RUnlock()
-
+    ctx := context.Background()
     domainCount := make(map[string]int)
 
-    for _, originalURL := range s.urls {
-        parsedURL, err := url.Parse(originalURL)
+    keys, err := s.client.Keys(ctx, "*").Result()
+    if err != nil {
+        return domainCount
+    }
+
+    for _, key := range keys {
+        originalURL, err := s.client.Get(ctx, key).Result()
         if err == nil {
-            domain := parsedURL.Host
-            domainCount[domain]++
+            domain := extractDomain(originalURL)
+            if domain != "" {
+                domainCount[domain]++
+            }
         }
     }
 
-    // Create a slice of domain names and sort by frequency
+    // Convert map to a slice and sort it by frequency
     type kv struct {
         Key   string
         Value int
@@ -79,7 +113,7 @@ func (s *URLStore) GetTopDomains(limit int) map[string]int {
         return sortedDomains[i].Value > sortedDomains[j].Value
     })
 
-    // Prepare the final result with a limit
+    // Limit the results
     topDomains := make(map[string]int)
     for i, domain := range sortedDomains {
         if i >= limit {
@@ -103,4 +137,12 @@ func encode(num int64) string {
         num = num / base
     }
     return encoded
+}
+
+func extractDomain(urlStr string) string {
+    u, err := url.Parse(urlStr)
+    if err != nil || u.Host == "" {
+        return ""
+    }
+    return u.Host
 }

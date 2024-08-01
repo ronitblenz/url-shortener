@@ -16,7 +16,14 @@ func ShortenURL(c *gin.Context, urlStore *model.URLStore) {
         c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request"})
         return
     }
-    shortURL := urlStore.Save(req.URL)
+
+    // Save the URL and handle the returned short URL and error
+    shortURL, err := urlStore.Save(req.URL)
+    if err != nil {
+        c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to shorten URL"})
+        return
+    }
+
     c.JSON(http.StatusOK, gin.H{"short_url": shortURL})
 }
 

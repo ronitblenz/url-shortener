@@ -4,21 +4,27 @@ import (
     "url-shortener/handler"
     "url-shortener/model"
     "github.com/gin-gonic/gin"
+    "os"
 )
 
 func main() {
-    r := gin.Default()
-    urlStore := model.NewURLStore()
+    redisHost := os.Getenv("REDIS_HOST")
+    if redisHost == "" {
+        redisHost = "localhost:6379"
+    }
 
-    r.POST("/shorten", func(c *gin.Context) {
+    urlStore := model.NewURLStore(redisHost)
+    router := gin.Default()
+
+    router.POST("/shorten", func(c *gin.Context) {
         handler.ShortenURL(c, urlStore)
     })
-    r.GET("/:shortURL", func(c *gin.Context) {
+    router.GET("/:shortURL", func(c *gin.Context) {
         handler.RedirectURL(c, urlStore)
     })
-    r.GET("/metrics", func(c *gin.Context) {
+    router.GET("/metrics", func(c *gin.Context) {
         handler.GetMetrics(c, urlStore)
     })
 
-    r.Run(":8080")
+    router.Run(":8080")
 }
