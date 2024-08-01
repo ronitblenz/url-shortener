@@ -83,3 +83,39 @@ func TestRedirectURL(t *testing.T) {
     assert.Equal(t, http.StatusMovedPermanently, w.Code)
     assert.Equal(t, "http://example.com", w.Header().Get("Location"))
 }
+
+func TestGetMetrics(t *testing.T) {
+    router := setupRouter()
+
+    // Shorten multiple URLs
+    urls := []string{
+        "http://example.com",
+        "http://example.com/page1",
+        "http://example.org",
+        "http://example.net",
+        "http://example.net/page",
+    }
+
+    for _, url := range urls {
+        w := httptest.NewRecorder()
+        body := bytes.NewBufferString(`{"url": "` + url + `"}`)
+        req, _ := http.NewRequest("POST", "/shorten", body)
+        router.ServeHTTP(w, req)
+        assert.Equal(t, 200, w.Code)
+    }
+
+    // Now get the metrics
+    w := httptest.NewRecorder()
+    req, _ := http.NewRequest("GET", "/metrics", nil)
+    router.ServeHTTP(w, req)
+
+    assert.Equal(t, 200, w.Code)
+
+    var response map[string]int
+    json.Unmarshal(w.Body.Bytes(), &response)
+
+    // Check if the metrics are correct
+    assert.Equal(t, 2, response["example.com"])
+    assert.Equal(t, 1, response["example.org"])
+    assert.Equal(t, 2, response["example.net"])
+}
