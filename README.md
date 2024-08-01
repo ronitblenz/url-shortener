@@ -6,8 +6,13 @@ A simple URL shortener service built with Go and Gin. This service allows users 
 
 ## Getting Started
 
-### Prerequisites
+### Docker Setup
 
+```bash
+docker-compose up --build
+```
+
+### Local Setup
 
 1. **Clone the repository:**
 
@@ -76,3 +81,8 @@ go test ./tests
 
 This will execute all the test cases in the `tests` package and display the results.
 
+### Docker Image Link : 
+
+```bash
+https://hub.docker.com/layers/ronitblenz/url-shortener/latest/images/latest
+```
