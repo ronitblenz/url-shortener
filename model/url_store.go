@@ -31,3 +31,26 @@ func (s *URLStore) Get(shortURL string) (string, bool) {
     url, found := s.store[shortURL]
     return url, found
 }
+
+func (s *URLStore) GetTopDomains(limit int) map[string]int {
+    domainCount := make(map[string]int)
+    for _, url := range s.store {
+        domain := extractDomain(url)
+        domainCount[domain]++
+    }
+
+    topDomains := make(map[string]int)
+    // Extract top N domains based on count
+    for domain, count := range domainCount {
+        topDomains[domain] = count
+        if len(topDomains) == limit {
+            break
+        }
+    }
+    return topDomains
+}
+
+func extractDomain(url string) string {
+    // Logic to extract domain from the URL
+    return url // Placeholder
+}
