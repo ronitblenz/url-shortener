@@ -13,13 +13,15 @@ const (
 
 type URLStore struct {
     sync.RWMutex
-    urls    map[string]string
-    counter int64
+    urls     map[string]string
+    reverse  map[string]string // for reverse lookup
+    counter  int64
 }
 
 func NewURLStore() *URLStore {
     return &URLStore{
         urls:    make(map[string]string),
+        reverse: make(map[string]string),
         counter: 1,
     }
 }
@@ -28,10 +30,16 @@ func (s *URLStore) Save(originalURL string) string {
     s.Lock()
     defer s.Unlock()
 
+    // Check if the URL already exists
+    if shortURL, exists := s.reverse[originalURL]; exists {
+        return shortURL
+    }
+
     // Increment counter and encode it
     shortURL := encode(s.counter)
     s.counter++
     s.urls[shortURL] = originalURL
+    s.reverse[originalURL] = shortURL
     return shortURL
 }
 

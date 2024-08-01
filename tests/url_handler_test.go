@@ -1,13 +1,14 @@
 package tests
 
 import (
-    "testing"
-    "net/http"
-    "net/http/httptest"
     "bytes"
     "encoding/json"
+    "net/http"
+    "net/http/httptest"
+    "testing"
     "url-shortener/handler"
     "url-shortener/model"
+
     "github.com/gin-gonic/gin"
     "github.com/stretchr/testify/assert"
 )
@@ -16,15 +17,21 @@ var urlStore *model.URLStore
 
 func setupRouter() *gin.Engine {
     router := gin.Default()
-    router.POST("/shorten", handler.ShortenURL)
-    router.GET("/:shortURL", handler.RedirectURL)
-    router.GET("/metrics", handler.GetMetrics)
+    // Using closures to pass the urlStore to the handlers
+    router.POST("/shorten", func(c *gin.Context) {
+        handler.ShortenURL(c, urlStore)
+    })
+    router.GET("/:shortURL", func(c *gin.Context) {
+        handler.RedirectURL(c, urlStore)
+    })
+    router.GET("/metrics", func(c *gin.Context) {
+        handler.GetMetrics(c, urlStore)
+    })
     return router
 }
 
 func TestMain(m *testing.M) {
     urlStore = model.NewURLStore()
-    handler.SetURLStore(urlStore) // Set the URL store for the handler
     m.Run()
 }
 
