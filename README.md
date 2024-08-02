@@ -2,7 +2,6 @@
 
 A simple URL shortener service built with Go and Gin. This service allows users to shorten URLs, redirect to the original URL, and track domain metrics.
 
-```This is made for the assignment submission for InfraCloud Technologies```
 
 ## Getting Started
 
